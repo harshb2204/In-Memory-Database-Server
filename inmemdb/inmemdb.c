@@ -3,6 +3,22 @@
 bool servercontinuation;
 bool childcontinuation;
 
+int32 handle_hello(Client*, int8*, int8*);
+CmdHandler handlers[] = {
+    {(int8*)"hello", handle_hello }
+};
+
+Callback getcmd(int8 *cmd){
+    printf("%zu\n", sizeof(handlers));
+    return NULL;
+}
+
+
+int32 handle_hello(Client *cli, int8* folder, int8 *args){
+        dprintf(cli->s, "hello '%s'\n", folder ); 
+        return 0;
+}
+
 void zero(int8 *str, int16 size){
     int8 *p;
     int16 n;
@@ -16,69 +32,61 @@ void zero(int8 *str, int16 size){
     //zero() is just a manual implementation of memset(..., 0, ...).
 }
 
-void childloop(Client *cli){
-    
-    int8 buf[256]; //buffer which will read from the socket fd
+void childloop(Client *cli) {
+    int8 buf[256]; // buffer for input
     int16 n;
 
-    int8 *p, *f;
     int8 cmd[256], folder[256], args[256];
     zero(buf, 256);
-    read(cli->s,(char*) buf, 255);
-    n = (int16)strlen((char*)buf);
-    if(n>254){
-        n = 254;
-    }
-
-    // select  /Users/harsh
-    // create /Users/logins
-    // insert /Users/harsh iqwbfiw
-
-    for(p=buf; ((*p) && (n--) && (*p!=' ') && (*p != '\n') && (*p != '\r')); p++);
-
-
-    zero(cmd, 256);  
+    zero(cmd, 256);
     zero(folder, 256);
     zero(args, 256);
-    if(!(*p) ||(!n) ){
-        strncpy((char *)cmd, (char *)buf, 255);
-         
-    }
-    else if((*p == ' ') || (*p == '\n') || (*p == '\r')){
-        *p = 0;
-        strncpy((char *)cmd, (char *)buf, 255);
-    }
 
-    for(p++, f = p; ((*p) && (n--) && (*p!=' ') && (*p != '\n') && (*p != '\r')); p++);
-
-
-   
-    if(!(*p) ||(!n) ){
-        strncpy((char *)folder, (char *)f, 255);
-        goto done;
-         
+    // Read from socket
+    n = read(cli->s, (char*) buf, 255);
+    if (n <= 0) {
+        return; // nothing read or error
     }
-    else if((*p == ' ') || (*p == '\n') || (*p == '\r')){
-        *p = 0;
-        strncpy((char *)folder, (char *)f, 255);
+    buf[n] = 0; // null-terminate
+
+    // Strip trailing newlines/carriage returns
+    char *end = (char*)buf + strlen((char*)buf) - 1;
+    while (end >= (char*)buf && (*end == '\n' || *end == '\r')) {
+        *end = 0;
+        end--;
     }
 
-    p++;
-    if(*p){
-        strncpy((char*) args, (char*)p, 255);
-        for(p = args; ((*p) && (*p!='\n') && (*p!='\r')); p++ );
-        *p = 0;
+    // Example: "insert /Users/harsh iqwbfiw"
+
+    char *token;
+    char *saveptr;
+
+    // First word → cmd
+    token = strtok_r((char*)buf, " ", &saveptr);
+    if (token) {
+        strncpy((char*)cmd, token, 255);
     }
 
-    done: 
-    dprintf(cli->s, "\n cmd:\t%s\n", cmd);
+    // Second word → folder
+    token = strtok_r(NULL, " ", &saveptr);
+    if (token) {
+        strncpy((char*)folder, token, 255);
+    }
+
+    // Remaining → args
+    token = strtok_r(NULL, "", &saveptr); // take rest of string
+    if (token) {
+        strncpy((char*)args, token, 255);
+    }
+
+    // Print results
+    dprintf(cli->s, "\ncmd:\t%s\n", cmd);
     dprintf(cli->s, "folder:\t%s\n", folder);
     dprintf(cli->s, "args:\t%s\n", args);
 
-
-
     return;
 }
+
 
 void mainloop(int s){
     struct sockaddr_in cli;
@@ -93,7 +101,7 @@ void mainloop(int s){
     s2 = accept(s, (struct sockaddr *)&cli, (unsigned int *)&len);
 
     if(s2<0){
-        sleep(1);
+        
         return;
 
     }
@@ -106,7 +114,7 @@ void mainloop(int s){
     assert(client);
 
     zero((int8 *)client, sizeof(struct s_client));
-    client->s = s;
+    client->s = s2;
     client-> port = port;
     strncpy(client->ip, ip, 15);
 
@@ -163,6 +171,8 @@ int main(int argc, char *argv[]){
     char *sport;
     int16 port;
 
+
+    getcmd((int8*)"hello");
     if(argc<2){
         sport = PORT;
     }
@@ -186,3 +196,5 @@ int main(int argc, char *argv[]){
     return 0;
 
 }
+
+#pragma GCC diagnostic pop
